@@ -1,0 +1,6 @@
+[package]
+name = "spectrum_learn_rs"
+version = "0.1.0"
+authors = ["Michael Walczyk <michael.walczyk@obscuradigital.com>"]
+
+[dependencies]
