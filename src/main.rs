@@ -23,16 +23,23 @@ fn main() {
     let window = glutin::Window::new().unwrap();
     window.set_inner_size(200, 200);
 
-    let mut vao = 0;
+    let mut pvao = 0;
+    let mut pvbo = 0;
     unsafe {
         window.make_current();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
         gl::ClearColor(1.0, 0.0, 0.0, 1.0);
-        let mut vao = 0;
-        let mut vbo = 0;
-        // Create Vertex Array Object
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
+
+        // Generate the VAO
+        gl::GenVertexArrays(1, &mut pvao);
+        gl::BindVertexArray(pvao);
+
+        // Bind the VBO
+        gl::GenBuffers(1, &mut pvbo);
+        gl::BindBuffer(gl::ARRAY, pvbo);
+        static VERTEX_DATA: [GLfloat; 2] = [ -0.5, 0.0, 0.5, 0.0 ]
+        // Unbind the VAO
+        gl::BindVertexArray(0);
     }
     for event in window.wait_events() {
         unsafe { gl::Clear(gl::COLOR_BUFFER_BIT) };

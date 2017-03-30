@@ -4,21 +4,6 @@
     <output url="file://$PROJECT_DIR$/out" />
   </component>
   <component name="RustProjectSettings">
-    <option name="toolchainHomeDirectory" value="C:\Users\Michael Walczyk\.cargo\bin" />
-  </component>
-  <component name="masterDetails">
-    <states>
-      <state key="ProjectJDKs.UI">
-        <settings>
-          <splitter-proportions>
-            <option name="proportions">
-              <list>
-                <option value="0.2" />
-              </list>
-            </option>
-          </splitter-proportions>
-        </settings>
-      </state>
-    </states>
+    <option name="toolchainHomeDirectory" value="C:\Users\michael.walczyk\.cargo\bin" />
   </component>
 </project>
