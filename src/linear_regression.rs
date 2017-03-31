@@ -1,22 +1,22 @@
 pub struct Line {
-    pub m: f64,
-    pub b: f64
+    pub m: f32,
+    pub b: f32
 }
 
 pub struct Point {
-    pub x: f64,
-    pub y: f64,
+    pub x: f32,
+    pub y: f32,
 }
 
 pub struct LinearRegression<'a> {
-    pub points: &'a [(f64, f64)],
-    learning_rate: f64,
+    pub points: &'a [(f32, f32)],
+    learning_rate: f32,
     iterations: u32,
 }
 
 impl<'a> LinearRegression<'a> {
     /// Constructs a new `LinearRegression` instance.
-    pub fn from_records(pts: &'a [(f64, f64)]) -> LinearRegression<'a> {
+    pub fn from_records(pts: &'a [(f32, f32)]) -> LinearRegression<'a> {
         LinearRegression {
             points: pts,
             learning_rate: 0.0001,
@@ -28,7 +28,7 @@ impl<'a> LinearRegression<'a> {
     /// descent.
     ///
     /// By default, the learning rate is set to 0.0001.
-    pub fn learning_rate(mut self, rate: f64) -> LinearRegression<'a> {
+    pub fn learning_rate(mut self, rate: f32) -> LinearRegression<'a> {
         self.learning_rate = rate;
         self
     }
@@ -46,10 +46,10 @@ impl<'a> LinearRegression<'a> {
     /// algorithm, given a starting slope `m` and y-intercept `b`.
     ///
     /// Returns the newly calculated slope and y-intercept as a tuple.
-    fn gradient_descent(&self, m: f64, b: f64) -> (f64, f64) {
+    fn gradient_descent(&self, m: f32, b: f32) -> (f32, f32) {
         let mut m_current = m;
         let mut b_current = b;
-        let n = self.points.len() as f64;
+        let n = self.points.len() as f32;
         let inv_n = 1.0 / n;
 
         for _ in 0..self.iterations {
@@ -75,7 +75,7 @@ impl<'a> LinearRegression<'a> {
 
     /// Computes the mean squared error, given the current slope
     /// `m` and y-intercept `b`.
-    fn mse(&self, m: f64, b: f64) -> f64 {
+    fn mse(&self, m: f32, b: f32) -> f32 {
         let mut calculated_error = 0.0;
 
         for &(x, y) in self.points.iter() {
@@ -84,12 +84,12 @@ impl<'a> LinearRegression<'a> {
             // to x and the actual value of y
             calculated_error += (y - (m * x + b)).powf(2.0);
         }
-        calculated_error / self.points.len() as f64
+        calculated_error / self.points.len() as f32
     }
 
     /// Runs the linear regression algorithm with starting
     /// slope m and y-intercept b.
-    pub fn run(&self, m_initial: f64, b_initial: f64) {
+    pub fn run(&self, m_initial: f32, b_initial: f32) {
         let error_initial = self.mse(m_initial, b_initial);
         println!("Starting gradient descent...");
         println!("Initially, m = {}, b = {}, error = {}", m_initial, b_initial, error_initial);

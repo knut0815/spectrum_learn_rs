@@ -76,15 +76,31 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
     }
 }
 
+fn map(v: f32, fmin: f32, fmax: f32, tmin: f32, tmax: f32) -> f32 {
+    (v - fmin) / (tmin - fmin) * (tmax - fmax) + fmax
+    //` println!("mapping {} from ({}, {}) to ({}, {})", v, fmin, fmax, tmin, tmax);
+}
+
 fn main() {
     let mut reader = csv::Reader::from_file("./src/data.csv").unwrap().has_headers(false);
 
-    let mut points: Vec<(f64, f64)> = Vec::new();
+    let mut points: Vec<(f32, f32)> = Vec::new();
+    let mut max_x = 0.0;
+    let mut max_y = 0.0;
+    let mut min_x = std::f32::MAX;
+    let mut min_y = std::f32::MAX;
     for record in reader.decode() {
         // Test score, number of hours studied
-        let p: (f64, f64) = record.unwrap();
+        let p: (f32, f32) = record.unwrap();
+        if p.0 > max_x { max_x = p.0; }
+        if p.1 > max_y { max_y = p.1; }
+        if p.0 < min_x { min_x = p.0; }
+        if p.1 < min_y { min_y = p.1; }
+
         points.push(p);
     }
+    println!("X bounds: {}, {}", min_x, max_x);
+    println!("Y bounds: {}, {}", min_y, max_y);
 
     let lin_reg = LinearRegression::from_records(&points).iterations(3);
     //lin_reg.run(0.0, 0.0);
@@ -94,20 +110,20 @@ fn main() {
     let window_size = window.get_inner_size();
     println!("{:?}", window.get_inner_size_points());
 
+    let mut points_to_draw: Vec<GLfloat> = Vec::new();
+    let inv_range_x = 1.0 / (max_x - min_x).abs();
+    let inv_range_y = 1.0 / (max_y - min_y).abs();
+    for pt in &points {
+        let mapped_x = pt.0 * inv_range_x; // map(pt.0 as f32, min_x as f32, max_x as f32, 0.0, 0.5);
+        let mapped_y = pt.1 * inv_range_y; // map(pt.1 as f32, min_y as f32, max_y as f32, 0.0, 0.5);
+        println!("({}, {}) -- to -- ({}, {})", pt.0, pt.1, mapped_x, mapped_y);
+        points_to_draw.push(mapped_x);
+        points_to_draw.push(mapped_y);
+    }
+
     let mut vao = 0;
     let mut vbo = 0;
     let mut shader_program = 0;
-
-    let mut points_to_draw: Vec<GLfloat> = Vec::new();
-    for pt in &points {
-        points_to_draw.push(pt.0 as f32 / 400.0);
-        points_to_draw.push(pt.1 as f32 / 400.0);
-    }
-
-    for pt in &points_to_draw {
-        println!("{:?}", pt);
-    }
-
     unsafe {
         window.make_current();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
