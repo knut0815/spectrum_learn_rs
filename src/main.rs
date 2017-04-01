@@ -3,8 +3,11 @@ extern crate gl;
 extern crate glutin;
 
 mod linear_regression;
+mod program;
 
 use linear_regression::LinearRegression;
+use program::Program;
+
 use gl::types::{GLfloat, GLenum, GLuint, GLint, GLchar, GLsizeiptr, GLboolean};
 use std::mem;
 use std::ffi::CString;
@@ -13,80 +16,15 @@ use std::str;
 
 static VERTEX_DATA: [GLfloat; 4] = [ -0.5, 0.0, 0.5, 0.0 ];
 
-static VS_SRC: &'static str =
-    "#version 330\n\
-    layout (location = 0) in vec2 position;\n\
-    void main() {\n\
-    gl_Position = vec4(position, 0.0, 1.0);\n\
-    }";
-
-static FS_SRC: &'static str =
-    "#version 330\n\
-    out vec4 out_color;\n\
-    void main() {\n\
-       out_color = vec4(1.0, 1.0, 1.0, 1.0);\n\
-    }";
-
-fn compile_shader(src: &str, ty: GLenum) -> GLuint {
-    let shader;
-    unsafe {
-        shader = gl::CreateShader(ty);
-        // Attempt to compile the shader
-        let c_str = CString::new(src.as_bytes()).unwrap();
-        gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-        gl::CompileShader(shader);
-
-        // Get the compile status
-        let mut status = gl::FALSE as GLint;
-        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
-
-        // Fail on error
-        if status != (gl::TRUE as GLint) {
-            let mut len = 0;
-            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::new();
-            buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
-            gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-            panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ShaderInfoLog not valid utf8"));
-        }
-    }
-    shader
-}
-
-fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
-    unsafe {
-        let program = gl::CreateProgram();
-        gl::AttachShader(program, vs);
-        gl::AttachShader(program, fs);
-        gl::LinkProgram(program);
-
-        // Get the link status
-        let mut status = gl::FALSE as GLint;
-        gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-
-        // Fail on error
-        if status != (gl::TRUE as GLint) {
-            let mut len: GLint = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::new();
-            buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
-            gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-            panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8"));
-        }
-        program
-    }
-}
-
 fn map(v: f32, fmin: f32, fmax: f32, tmin: f32, tmax: f32) -> f32 {
     (v - fmin) * ((tmax - tmin) / (fmax - fmin)) + tmin
 }
 
 fn main() {
-    let m = map(2.0, 0.0, 4.0, -0.5, 0.5);
-    println!("{}", m);
-
     let mut reader = csv::Reader::from_file("./src/data.csv").unwrap().has_headers(false);
 
+    // Parse the CSV file while keeping track of the
+    // minimum and maximum value of each feature
     let mut points: Vec<(f32, f32)> = Vec::new();
     let mut max_x = 0.0;
     let mut max_y = 0.0;
@@ -102,16 +40,14 @@ fn main() {
 
         points.push(p);
     }
-    println!("X bounds: {}, {}", min_x, max_x);
-    println!("Y bounds: {}, {}", min_y, max_y);
 
-    let lin_reg = LinearRegression::from_records(&points).iterations(3);
-    //lin_reg.run(0.0, 0.0);
+    // Create and run the linear regression algorithm on the dataset
+    let lin_reg = LinearRegression::from_records(&points).iterations(0);
+    let (m, b) = lin_reg.run(0.0, 0.0);
 
     // Create the window
     let window = glutin::Window::new().unwrap();
     let window_size = window.get_inner_size();
-    println!("{:?}", window.get_inner_size_points());
 
     let mut points_to_draw: Vec<GLfloat> = Vec::new();
     for pt in &points {
@@ -119,44 +55,79 @@ fn main() {
         points_to_draw.push(map(pt.1 as f32, min_y as f32, max_y as f32, -0.5, 0.5));
     }
 
-    let mut vao = 0;
-    let mut vbo = 0;
+    // Handles to OpenGL objects
+    let mut scatter_vao = 0;
+    let mut scatter_vbo = 0;
+    let mut line_vao = 0;
+    let mut line_vbo = 0;
+    let best_fit: Vec<f32> = vec![-0.5, -0.5 * m + b, 0.5, 0.5 * m + b];
     let mut shader_program = 0;
+
     unsafe {
         window.make_current();
+        let window_size = window.get_inner_size().unwrap();
+
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+        gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
         gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-        
+
         // Compile and link shaders
-        let vs = compile_shader(VS_SRC, gl::VERTEX_SHADER);
-        let fs = compile_shader(FS_SRC, gl::FRAGMENT_SHADER);
-        shader_program = link_program(vs, fs);
+        let points_program = Program::from_file("src/points.vert", "src/points.frag");
+        gl::PointSize(4.0);
 
-        // Generate the VAO
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
+        /// Create a VBO and VAO for rendering the scatter plot
+        ///
+        ///
+        gl::GenVertexArrays(1, &mut scatter_vao);
+        gl::BindVertexArray(scatter_vao);
 
-        // Bind the VBO and copy data
-        gl::GenBuffers(1, &mut vbo);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::GenBuffers(1, &mut scatter_vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, scatter_vbo);
         gl::BufferData(gl::ARRAY_BUFFER,
                        (points_to_draw.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
                        mem::transmute(&points_to_draw[0]),
                        gl::STATIC_DRAW);
 
-        // Enable the vertex attribute at location 0 (positions)
         gl::EnableVertexAttribArray(0);
         gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
 
-        // Unbind the VAO
         gl::BindVertexArray(0);
+
+        /// Create a VBO and VAO for rendering the best-fit line
+        ///
+        ///
+        gl::GenVertexArrays(1, &mut line_vao);
+        gl::BindVertexArray(line_vao);
+
+        gl::GenBuffers(1, &mut line_vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, line_vbo);
+        gl::BufferData(gl::ARRAY_BUFFER,
+                       (best_fit.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+                       mem::transmute(&best_fit[0]),
+                       gl::STATIC_DRAW);
+
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
+
+        gl::BindVertexArray(0);
+
+        /// Bind the shader program that will be used to draw the
+        /// scatter plot as well as the best-fit line
+        ///
+        ///
+        points_program.bind();
     }
     for event in window.wait_events() {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::UseProgram(shader_program);
-            gl::BindVertexArray(vao);
+
+            // Draw scatter plot
+            gl::BindVertexArray(scatter_vao);
             gl::DrawArrays(gl::POINTS, 0, points_to_draw.len() as i32);
+
+            // Draw best-fit line
+            gl::BindVertexArray(line_vao);
+            gl::DrawArrays(gl::LINES, 0, best_fit.len() as i32);
         };
         window.swap_buffers();
 

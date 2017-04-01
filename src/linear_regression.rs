@@ -89,7 +89,7 @@ impl<'a> LinearRegression<'a> {
 
     /// Runs the linear regression algorithm with starting
     /// slope m and y-intercept b.
-    pub fn run(&self, m_initial: f32, b_initial: f32) {
+    pub fn run(&self, m_initial: f32, b_initial: f32) -> (f32, f32) {
         let error_initial = self.mse(m_initial, b_initial);
         println!("Starting gradient descent...");
         println!("Initially, m = {}, b = {}, error = {}", m_initial, b_initial, error_initial);
@@ -98,5 +98,6 @@ impl<'a> LinearRegression<'a> {
         let error_final = self.mse(m_final, b_final);
 
         println!("After {} iterations,  m = {}, b = {}, error = {}", self.iterations, m_final, b_final, error_final);
+        (m_final, b_final)
     }
 }
