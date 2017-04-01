@@ -59,6 +59,7 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
         gl::AttachShader(program, vs);
         gl::AttachShader(program, fs);
         gl::LinkProgram(program);
+
         // Get the link status
         let mut status = gl::FALSE as GLint;
         gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
@@ -77,11 +78,13 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 }
 
 fn map(v: f32, fmin: f32, fmax: f32, tmin: f32, tmax: f32) -> f32 {
-    (v - fmin) / (tmin - fmin) * (tmax - fmax) + fmax
-    //` println!("mapping {} from ({}, {}) to ({}, {})", v, fmin, fmax, tmin, tmax);
+    (v - fmin) * ((tmax - tmin) / (fmax - fmin)) + tmin
 }
 
 fn main() {
+    let m = map(2.0, 0.0, 4.0, -0.5, 0.5);
+    println!("{}", m);
+
     let mut reader = csv::Reader::from_file("./src/data.csv").unwrap().has_headers(false);
 
     let mut points: Vec<(f32, f32)> = Vec::new();
@@ -111,14 +114,9 @@ fn main() {
     println!("{:?}", window.get_inner_size_points());
 
     let mut points_to_draw: Vec<GLfloat> = Vec::new();
-    let inv_range_x = 1.0 / (max_x - min_x).abs();
-    let inv_range_y = 1.0 / (max_y - min_y).abs();
     for pt in &points {
-        let mapped_x = pt.0 * inv_range_x; // map(pt.0 as f32, min_x as f32, max_x as f32, 0.0, 0.5);
-        let mapped_y = pt.1 * inv_range_y; // map(pt.1 as f32, min_y as f32, max_y as f32, 0.0, 0.5);
-        println!("({}, {}) -- to -- ({}, {})", pt.0, pt.1, mapped_x, mapped_y);
-        points_to_draw.push(mapped_x);
-        points_to_draw.push(mapped_y);
+        points_to_draw.push(map(pt.0 as f32, min_x as f32, max_x as f32, -0.5, 0.5));
+        points_to_draw.push(map(pt.1 as f32, min_y as f32, max_y as f32, -0.5, 0.5));
     }
 
     let mut vao = 0;
