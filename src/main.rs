@@ -10,11 +10,7 @@ use program::Program;
 
 use gl::types::{GLfloat, GLenum, GLuint, GLint, GLchar, GLsizeiptr, GLboolean};
 use std::mem;
-use std::ffi::CString;
 use std::ptr;
-use std::str;
-
-static VERTEX_DATA: [GLfloat; 4] = [ -0.5, 0.0, 0.5, 0.0 ];
 
 fn map(v: f32, fmin: f32, fmax: f32, tmin: f32, tmax: f32) -> f32 {
     (v - fmin) * ((tmax - tmin) / (fmax - fmin)) + tmin
@@ -41,18 +37,25 @@ fn main() {
         points.push(p);
     }
 
-    // Create and run the linear regression algorithm on the dataset
-    let lin_reg = LinearRegression::from_records(&points).iterations(0);
-    let (m, b) = lin_reg.run(0.0, 0.0);
+    /// Create and run the linear regression algorithm on the data set
+    ///
+    ///
+    const MAX_ITERATIONS: u32 = 100;
+    let mut lin_reg = LinearRegression::from_records(&points);
+    let error_initial = lin_reg.mse();
+    println!("Starting gradient descent...");
+    println!("Initially, m = {}, b = {}, error = {}", lin_reg.m, lin_reg.b, error_initial);
 
-    // Create the window
+    /// Setup the window
+    ///
+    ///
     let window = glutin::Window::new().unwrap();
     let window_size = window.get_inner_size();
 
     let mut points_to_draw: Vec<GLfloat> = Vec::new();
     for pt in &points {
-        points_to_draw.push(map(pt.0 as f32, min_x as f32, max_x as f32, -0.5, 0.5));
-        points_to_draw.push(map(pt.1 as f32, min_y as f32, max_y as f32, -0.5, 0.5));
+        points_to_draw.push(map(pt.0 as f32, min_x as f32, max_x as f32, -1.0, 1.0));
+        points_to_draw.push(map(pt.1 as f32, min_y as f32, max_y as f32, -1.0, 1.0));
     }
 
     // Handles to OpenGL objects
@@ -60,7 +63,7 @@ fn main() {
     let mut scatter_vbo = 0;
     let mut line_vao = 0;
     let mut line_vbo = 0;
-    let best_fit: Vec<f32> = vec![-0.5, -0.5 * m + b, 0.5, 0.5 * m + b];
+    let mut best_fit: Vec<f32> = vec![-1.0, -1.0 * lin_reg.m + lin_reg.b, 1.0, 1.0 * lin_reg.m + lin_reg.b];
     let mut shader_program = 0;
 
     unsafe {
@@ -71,7 +74,6 @@ fn main() {
         gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
         gl::ClearColor(0.0, 0.0, 0.0, 1.0);
 
-        // Compile and link shaders
         let points_program = Program::from_file("src/points.vert", "src/points.frag");
         gl::PointSize(4.0);
 
@@ -117,7 +119,10 @@ fn main() {
         ///
         points_program.bind();
     }
-    for event in window.wait_events() {
+
+    let mut i: u32 = 0;
+    let mut frame_count: u32 = 0;
+    loop {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
@@ -128,12 +133,32 @@ fn main() {
             // Draw best-fit line
             gl::BindVertexArray(line_vao);
             gl::DrawArrays(gl::LINES, 0, best_fit.len() as i32);
-        };
+
+            // Update data
+            if frame_count % 3000 == 0 && i < MAX_ITERATIONS {
+                lin_reg.step_gradient_descent(1);
+                let error = lin_reg.mse();
+                println!("Taking one step,  m = {}, b = {}, error = {}", lin_reg.m, lin_reg.b, error);
+
+                best_fit = vec![-1.0, -1.0 * lin_reg.m + lin_reg.b, 1.0, 1.0 * lin_reg.m + lin_reg.b];
+                gl::BindBuffer(gl::ARRAY_BUFFER, line_vbo);
+                gl::BufferSubData(gl::ARRAY_BUFFER,
+                                  0,
+                                  (best_fit.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+                                  mem::transmute(&best_fit[0]));
+                i += 1;
+            }
+            frame_count += 1;
+        }
+
         window.swap_buffers();
 
-        match event {
-            glutin::Event::Closed => break,
-            _ => ()
+        for event in window.poll_events() {
+            match event {
+                glutin::Event::Closed => return,
+                _ => ()
+            }
         }
     }
+
 }
